@@ -1104,7 +1104,7 @@ namespace ICSharpCode.SharpZipLib.Zip
 				bool testData = (tests & HeaderTest.Extract) != 0;
 
 				var entryAbsOffset = offsetOfFirstEntry + entry.Offset;
-				
+
 				baseStream_.Seek(entryAbsOffset, SeekOrigin.Begin);
 				var signature = (int)ReadLEUint();
 
@@ -1601,8 +1601,8 @@ namespace ICSharpCode.SharpZipLib.Zip
 				{
 					// Create an empty archive if none existed originally.
 					if (entries_.Length != 0) return;
-					byte[] theComment = (newComment_ != null) 
-						? newComment_.RawComment 
+					byte[] theComment = (newComment_ != null)
+						? newComment_.RawComment
 						: _stringCodec.ZipArchiveCommentEncoding.GetBytes(comment_);
 					ZipFormat.WriteEndOfCentralDirectory(baseStream_, 0, 0, 0, theComment);
 				}
@@ -2507,15 +2507,15 @@ namespace ICSharpCode.SharpZipLib.Zip
 		/// <returns>The descriptor size, zero if there isn't one.</returns>
 		private static int GetDescriptorSize(ZipUpdate update, bool includingSignature)
 		{
-			if (!((GeneralBitFlags)update.Entry.Flags).HasFlag(GeneralBitFlags.Descriptor)) 
+			if (!((GeneralBitFlags)update.Entry.Flags).HasFlag(GeneralBitFlags.Descriptor))
 				return 0;
-			
-			var descriptorWithSignature = update.Entry.LocalHeaderRequiresZip64 
-				? ZipConstants.Zip64DataDescriptorSize 
+
+			var descriptorWithSignature = update.Entry.LocalHeaderRequiresZip64
+				? ZipConstants.Zip64DataDescriptorSize
 				: ZipConstants.DataDescriptorSize;
 
-			return includingSignature 
-				? descriptorWithSignature 
+			return includingSignature
+				? descriptorWithSignature
 				: descriptorWithSignature - sizeof(int);
 		}
 
@@ -2802,7 +2802,7 @@ namespace ICSharpCode.SharpZipLib.Zip
 
 			// Clumsy way of handling retrieving the original name and extra data length for now.
 			// TODO: Stop re-reading name and data length in CopyEntryDirect.
-			
+
 			uint nameLength = ReadLEUshort();
 			uint extraLength = ReadLEUshort();
 
@@ -2937,7 +2937,7 @@ namespace ICSharpCode.SharpZipLib.Zip
 			}
 			finally
 			{
-				if(updateFile != baseStream_)
+				if (updateFile != baseStream_)
 					updateFile.Dispose();
 			}
 
@@ -3102,7 +3102,7 @@ namespace ICSharpCode.SharpZipLib.Zip
 				}
 
 				byte[] theComment = newComment_?.RawComment ?? _stringCodec.ZipArchiveCommentEncoding.GetBytes(comment_);
-				ZipFormat.WriteEndOfCentralDirectory(workFile.baseStream_, updateCount_, 
+				ZipFormat.WriteEndOfCentralDirectory(workFile.baseStream_, updateCount_,
 					sizeEntries, centralDirOffset, theComment);
 
 				endOfStream = workFile.baseStream_.Position;
@@ -3444,8 +3444,134 @@ namespace ICSharpCode.SharpZipLib.Zip
 		#endregion Reading
 
 		// NOTE this returns the offset of the first byte after the signature.
-		private long LocateBlockWithSignature(int signature, long endLocation, int minimumBlockSize, int maximumVariableData) 
+		private long LocateBlockWithSignature(int signature, long endLocation, int minimumBlockSize, int maximumVariableData)
 			=> ZipFormat.LocateBlockWithSignature(baseStream_, signature, endLocation, minimumBlockSize, maximumVariableData);
+
+		/// <summary>
+		/// 
+		/// </summary>
+		/// <returns></returns>
+		public long GetCentralDirOffset()
+		{
+			// Search for the End Of Central Directory.  When a zip comment is
+			// present the directory will start earlier
+			//
+			// The search is limited to 64K which is the maximum size of a trailing comment field to aid speed.
+			// This should be compatible with both SFX and ZIP files but has only been tested for Zip files
+			// If a SFX file has the Zip data attached as a resource and there are other resources occurring later then
+			// this could be invalid.
+			// Could also speed this up by reading memory in larger blocks.
+
+			if (baseStream_.CanSeek == false)
+			{
+				throw new ZipException("ZipFile stream must be seekable");
+			}
+
+			long locatedEndOfCentralDir = LocateBlockWithSignature(ZipConstants.EndOfCentralDirectorySignature,
+				baseStream_.Length, ZipConstants.EndOfCentralRecordBaseSize, 0xffff);
+
+			if (locatedEndOfCentralDir < 0)
+			{
+				throw new ZipException("Cannot find central directory");
+			}
+
+			// Read end of central directory record
+			ushort thisDiskNumber = ReadLEUshort();
+			ushort startCentralDirDisk = ReadLEUshort();
+			ulong entriesForThisDisk = ReadLEUshort();
+			ulong entriesForWholeCentralDir = ReadLEUshort();
+			ulong centralDirSize = ReadLEUint();
+			long offsetOfCentralDir = ReadLEUint();
+			uint commentSize = ReadLEUshort();
+
+			if (commentSize > 0)
+			{
+				byte[] comment = new byte[commentSize];
+
+				StreamUtils.ReadFully(baseStream_, comment);
+				comment_ = _stringCodec.ZipArchiveCommentEncoding.GetString(comment);
+			}
+			else
+			{
+				comment_ = string.Empty;
+			}
+
+			bool isZip64 = false;
+			bool requireZip64 = false;
+
+			// Check if zip64 header information is required.
+			if ((thisDiskNumber == 0xffff) ||
+				(startCentralDirDisk == 0xffff) ||
+				(entriesForThisDisk == 0xffff) ||
+				(entriesForWholeCentralDir == 0xffff) ||
+				(centralDirSize == 0xffffffff) ||
+				(offsetOfCentralDir == 0xffffffff))
+			{
+				requireZip64 = true;
+			}
+
+			// #357 - always check for the existance of the Zip64 central directory.
+			// #403 - Take account of the fixed size of the locator when searching.
+			//    Subtract from locatedEndOfCentralDir so that the endLocation is the location of EndOfCentralDirectorySignature,
+			//    rather than the data following the signature.
+			long locatedZip64EndOfCentralDirLocator = LocateBlockWithSignature(
+				ZipConstants.Zip64CentralDirLocatorSignature,
+				locatedEndOfCentralDir - 4,
+				ZipConstants.Zip64EndOfCentralDirectoryLocatorSize,
+				0);
+
+			if (locatedZip64EndOfCentralDirLocator < 0)
+			{
+				if (requireZip64)
+				{
+					// This is only an error in cases where the Zip64 directory is required.
+					throw new ZipException("Cannot find Zip64 locator");
+				}
+			}
+			else
+			{
+				isZip64 = true;
+
+				// number of the disk with the start of the zip64 end of central directory 4 bytes
+				// relative offset of the zip64 end of central directory record 8 bytes
+				// total number of disks 4 bytes
+				ReadLEUint(); // startDisk64 is not currently used
+				ulong offset64 = ReadLEUlong();
+				uint totalDisks = ReadLEUint();
+
+				baseStream_.Position = (long)offset64;
+				long sig64 = ReadLEUint();
+
+				if (sig64 != ZipConstants.Zip64CentralFileHeaderSignature)
+				{
+					throw new ZipException(string.Format("Invalid Zip64 Central directory signature at {0:X}", offset64));
+				}
+
+				// NOTE: Record size = SizeOfFixedFields + SizeOfVariableData - 12.
+				ulong recordSize = ReadLEUlong();
+				int versionMadeBy = ReadLEUshort();
+				int versionToExtract = ReadLEUshort();
+				uint thisDisk = ReadLEUint();
+				uint centralDirDisk = ReadLEUint();
+				entriesForThisDisk = ReadLEUlong();
+				entriesForWholeCentralDir = ReadLEUlong();
+				centralDirSize = ReadLEUlong();
+				offsetOfCentralDir = (long)ReadLEUlong();
+
+				// NOTE: zip64 extensible data sector (variable size) is ignored.
+			}
+
+			if (!isZip64 && (offsetOfCentralDir < locatedEndOfCentralDir - (4 + (long)centralDirSize)))
+			{
+				offsetOfFirstEntry = locatedEndOfCentralDir - (4 + (long)centralDirSize + offsetOfCentralDir);
+				if (offsetOfFirstEntry <= 0)
+				{
+					throw new ZipException("Invalid embedded zip archive");
+				}
+			}
+
+			return offsetOfFirstEntry + offsetOfCentralDir;
+		}
 
 		/// <summary>
 		/// Search for and read the central directory of a zip file filling the entries array.
