@@ -11,7 +11,7 @@
   
   <!-- Nuget specific tags -->
   <PropertyGroup>
-    <Version>1.3.3</Version>
+    <Version>1.3.4</Version>
     <FileVersion>$(Version).11</FileVersion>
     <AssemblyVersion>$(FileVersion)</AssemblyVersion>
     <PackageId>SharpZipLib</PackageId>
