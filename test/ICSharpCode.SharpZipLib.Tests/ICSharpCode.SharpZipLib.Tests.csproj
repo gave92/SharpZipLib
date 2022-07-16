@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
-		<TargetFrameworks>netcoreapp3.1;net46</TargetFrameworks>
+		<TargetFrameworks>netcoreapp3.1;net48</TargetFrameworks>
     <ApplicationIcon />
     <StartupObject />
     <SignAssembly>true</SignAssembly>
