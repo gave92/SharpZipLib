@@ -4,6 +4,7 @@ using ICSharpCode.SharpZipLib.Zip;
 using NUnit.Framework;
 using System;
 using System.IO;
+using Does = ICSharpCode.SharpZipLib.Tests.TestSupport.Does;
 
 namespace ICSharpCode.SharpZipLib.Tests.Zip
 {
@@ -77,7 +78,7 @@ namespace ICSharpCode.SharpZipLib.Tests.Zip
 			outStream.WriteByte(89);
 			outStream.Close();
 
-			Assert.IsTrue(ZipTesting.TestArchive(msw.ToArray()));
+			Assert.That(msw.ToArray(), Does.PassTestArchive());
 
 			msw = new MemoryStreamWithoutSeek();
 			outStream = new ZipOutputStream(msw);
@@ -88,7 +89,7 @@ namespace ICSharpCode.SharpZipLib.Tests.Zip
 			outStream.WriteByte(89);
 			outStream.Close();
 
-			Assert.IsTrue(ZipTesting.TestArchive(msw.ToArray()));
+			Assert.That(msw.ToArray(), Does.PassTestArchive());
 		}
 
 		[Test]
@@ -110,11 +111,10 @@ namespace ICSharpCode.SharpZipLib.Tests.Zip
 				outStream.Close();
 			}
 
-			Assert.IsTrue(ZipTesting.TestArchive(msw.ToArray()));
+			var msBytes = msw.ToArray();
+			Assert.That(msBytes, Does.PassTestArchive());
 
-			msw.Position = 0;
-
-			using (var zis = new ZipInputStream(msw))
+			using (var zis = new ZipInputStream(new MemoryStream(msBytes)))
 			{
 				while (zis.GetNextEntry() != null)
 				{
@@ -147,7 +147,7 @@ namespace ICSharpCode.SharpZipLib.Tests.Zip
 			outStream.Finish();
 			outStream.Close();
 
-			Assert.IsTrue(ZipTesting.TestArchive(msw.ToArray()));
+			Assert.That(msw.ToArray(), Does.PassTestArchive());
 		}
 
 		/// <summary>
@@ -273,7 +273,7 @@ namespace ICSharpCode.SharpZipLib.Tests.Zip
 					Assert.AreEqual(inputBytes, outputBytes, "Archive content does not match the source content");
 				}, "Failed to locate entry stream in archive");
 
-				Assert.IsTrue(zf.TestArchive(testData: true), "Archive did not pass TestArchive");
+				Assert.That(zf, Does.PassTestArchive());
 			}
 		}
 

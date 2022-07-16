@@ -231,6 +231,21 @@ namespace ICSharpCode.SharpZipLib.Zip
 		/// </summary>
 		ReservedPkware15 = 0x8000
 	}
+	
+	/// <summary>
+	/// Helpers for <see cref="GeneralBitFlags"/>
+	/// </summary>
+	public static class GeneralBitFlagsExtensions
+	{
+		/// <summary>
+		/// This is equivalent of <see cref="Enum.HasFlag"/> in .NET Core, but since the .NET FW
+		/// version is really slow (due to un-/boxing and reflection)  we use this wrapper.
+		/// </summary>
+		/// <param name="flagData"></param>
+		/// <param name="flag"></param>
+		/// <returns></returns>
+		public static bool Includes(this GeneralBitFlags flagData, GeneralBitFlags flag) => (flag & flagData) != 0;
+	}
 
 	#endregion Enumerations
 
@@ -471,5 +486,29 @@ namespace ICSharpCode.SharpZipLib.Zip
 		public const int ENDSIG = 'P' | ('K' << 8) | (5 << 16) | (6 << 24);
 
 		#endregion Header Signatures
+	}
+
+	/// <summary>
+	/// GeneralBitFlags helper extensions
+	/// </summary>
+	public static class GenericBitFlagsExtensions
+	{
+		/// <summary>
+		/// Efficiently check if any of the <see cref="GeneralBitFlags">flags</see> are set without enum un-/boxing
+		/// </summary>
+		/// <param name="target"></param>
+		/// <param name="flags"></param>
+		/// <returns>Returns whether any of flags are set</returns>
+		public static bool HasAny(this GeneralBitFlags target, GeneralBitFlags flags)
+			=> ((int)target & (int)flags) != 0;
+
+		/// <summary>
+		/// Efficiently check if all the <see cref="GeneralBitFlags">flags</see> are set without enum un-/boxing
+		/// </summary>
+		/// <param name="target"></param>
+		/// <param name="flags"></param>
+		/// <returns>Returns whether the flags are all set</returns>
+		public static bool HasAll(this GeneralBitFlags target, GeneralBitFlags flags)
+			=> ((int)target & (int)flags) == (int)flags;
 	}
 }
